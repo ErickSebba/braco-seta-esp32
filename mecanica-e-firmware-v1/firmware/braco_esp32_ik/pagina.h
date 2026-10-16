@@ -1,0 +1,344 @@
+/*
+  pagina.h - a pagina de controle (pagina.html) guardada na memoria flash do ESP32.
+  E uma copia exata de pagina.html dentro de uma string C++. Depois de editar pagina.html,
+  copie o HTML inteiro e cole entre  R"HTML(<!doctype html>
+<!--
+  Pagina de controle - versao 2 (servida pelo ESP32 em http://192.168.4.1)
+
+  O QUE ELA FAZ
+  - Desenha o braco em 3 vistas: 3/4 (grande), lado e cima. O desenho cheio e onde o braco
+    esta; o tracejado e para onde ele vai (acompanha o slider enquanto voce arrasta).
+    A conta (cinematica direta) e feita aqui mesmo no navegador com as medidas e a
+    calibracao que o ESP32 envia em /api/model.
+  - Aba JUNTAS: um slider por servo (igual a versao 1).
+  - Aba MOVER XYZ: move a ponta da garra em linha reta (frente/tras, esquerda/direita,
+    sobe/desce), gira a base, abre/fecha a garra e ENSINA pontos ("Salvar ponto aqui").
+  - Aba TAREFA: escolhe o ponto onde pegar (A) e onde soltar (B) e executa.
+  - Aba CALIBRACAO: assistente em 8 passos; cada passo mostra os sliders que voce precisa.
+  - Fila de envio dos sliders igual a versao 1 (um pedido por vez, so o valor mais novo).
+  - Nao usa nada da internet.
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark"><meta name="theme-color" content="#0D2648">
+<title>Braço ESP32</title>
+<style>
+:root{--bg:#0D2648;--card:#0D2A4F;--view:#0A1F3D;--ink:#FFFFFF;--dim:#E3E5E8;--mute:#88A5D6;--line:rgba(136,165,214,.22);--acc:#038FFD;--accink:#FFFFFF;--deep:#053A96;--ok:#4ADE80;--bad:#F0525E;--track:rgba(136,165,214,.28);--arm:#38A8FF;--ghost:rgba(136,165,214,.75);--grid:rgba(136,165,214,.13);--box:#88A5D6;--pt:#4ADE80;--mono:ui-monospace,'IBM Plex Mono',SFMono-Regular,Consolas,monospace}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 "Space Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:max(14px,env(safe-area-inset-top)) 14px 40px}
+main{max-width:600px;margin:0 auto;display:grid;gap:12px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font-size:20px;margin:0;font-weight:650}
+.st{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mute)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--bad)}.dot.on{background:var(--ok)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:3px;padding:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>button{flex:1}
+button{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:3px;padding:8px 12px;min-height:42px;cursor:pointer}
+button:active{transform:translateY(1px)}button:disabled{opacity:.4}
+button.pri{background:var(--acc);border-color:var(--acc);color:var(--accink)}
+button.stop{background:var(--bad);border-color:var(--bad);color:#fff;flex:1}
+button.sm{min-height:34px;padding:4px 10px;font-size:14px}
+.views{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.views canvas{width:100%;display:block;border-radius:3px;background:var(--view);border:1px solid var(--line)}
+.views .big{grid-column:1/3}
+.vl{font-size:12px;color:var(--mute);margin:2px 0 0 4px}
+.tcp{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;font-size:14px;color:var(--mute);margin-top:8px;flex-wrap:wrap;gap:4px}
+.warn{color:var(--bad);font-size:13px;margin-top:6px}
+.tabs{display:flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:3px;padding:4px}
+.tabs button{flex:1;border:0;min-height:38px;font-size:14px;padding:4px}
+.tabs button.on{background:var(--acc);color:var(--accink)}
+.tab{display:none}.tab.on{display:grid;gap:12px}
+.j{display:grid;gap:4px;padding:8px 0;border-top:1px solid var(--line)}.j:first-child{border-top:0;padding-top:0}
+.jh{display:flex;justify-content:space-between}.jn{font-weight:600}.jv{color:var(--mute);font-variant-numeric:tabular-nums}
+.jc{display:grid;grid-template-columns:40px 1fr 40px;gap:8px;align-items:center}
+.jc button{padding:0;min-height:38px;font-size:20px}
+input[type=range]{width:100%;height:38px;background:transparent;-webkit-appearance:none;appearance:none;touch-action:pan-y}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--track)}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--track)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:50%;background:var(--acc);margin-top:-10px;border:3px solid var(--card);box-shadow:0 0 0 1px var(--acc)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--acc);border:3px solid var(--card)}
+h2{font-size:13px;margin:0 0 8px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);font-weight:650}
+.jog{display:grid;grid-template-columns:repeat(3,1fr) 12px 1fr;gap:6px}
+.jog button{min-height:52px;font-size:14px}
+.steps{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:14px;color:var(--mute)}
+.steps button.on{background:var(--acc);color:var(--accink);border-color:var(--acc)}
+.pts{display:grid;gap:6px}
+.pt{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:3px;padding:6px 8px;font-size:14px}
+.pt b{min-width:56px}.pt span{flex:1;color:var(--mute);font-variant-numeric:tabular-nums}
+input[type=text],input[type=number],select{font:inherit;padding:8px;border-radius:3px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-height:40px}
+label.f{display:grid;gap:4px;font-size:14px;color:var(--mute)}
+.cal{border:1px solid var(--line);border-radius:3px;padding:10px;display:grid;gap:6px}
+.cal.cur{border-color:var(--acc)}
+.cal .t{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.cal .ok{color:var(--ok);font-weight:600;font-size:14px}.cal .no{color:var(--mute);font-size:14px}
+.cal p{margin:0;font-size:14px;color:var(--mute)}
+.msg{min-height:20px;font-size:13px;color:var(--mute)}
+.prog{font-size:14px}
+/* tema SETA */
+h1{letter-spacing:-.01em}
+.brand{font:500 11px/1 var(--mono);color:var(--acc);letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px}
+h2,.vl,.st,.jv,.tcp,.steps,.msg{font-family:var(--mono)}
+h2{color:var(--acc);letter-spacing:.1em;font-size:12px}
+button{background:transparent}
+button:hover{border-color:var(--acc)}
+button.pri:hover{background:var(--deep)}
+.card{background:var(--card)}
+.tabs button.on,.steps button.on{box-shadow:0 0 0 1px var(--acc)}
+input[type=text],input[type=number],select{background:var(--view)}
+</style>
+</head>
+<body>
+<main>
+<header><div><div class="brand">SETA · UFMT</div><h1>Braço ESP32</h1></div><div class="st"><span id="dot" class="dot"></span><span id="stt">conectando…</span></div></header>
+<div class="row"><button class="stop" id="bStop">PARAR</button></div>
+
+<!-- ===== vistas do braco ===== -->
+<section class="card">
+  <div class="views">
+    <div class="big"><canvas id="v34" width="600" height="340"></canvas><div class="vl">3/4</div></div>
+    <div><canvas id="vSide" width="300" height="240"></canvas><div class="vl">Lado</div></div>
+    <div><canvas id="vTop" width="300" height="240"></canvas><div class="vl">Cima</div></div>
+  </div>
+  <div class="tcp"><span id="tcp">ponta: —</span><span id="phi"></span></div>
+  <div class="warn" id="wcal"></div>
+  <div class="warn" id="werr"></div>
+</section>
+
+<nav class="tabs" id="tabs">
+  <button data-t="tJ" class="on">Juntas</button><button data-t="tX">Mover XYZ</button><button data-t="tT">Tarefa</button><button data-t="tC">Calibração</button>
+</nav>
+
+<!-- ===== aba juntas ===== -->
+<div class="tab on" id="tJ">
+  <section class="card">
+    <div class="row" style="margin-bottom:10px"><button id="bEng" class="pri">Ligar servos</button><button id="bRelax">Soltar</button><button id="bHome">Home</button></div>
+    <div id="joints"></div>
+  </section>
+  <section class="card"><h2>Velocidade</h2>
+    <div class="jc" style="grid-template-columns:auto 1fr auto"><span>Lento</span><input type="range" id="speed" min="5" max="100" value="40"><span id="spv">40%</span></div>
+  </section>
+</div>
+
+<!-- ===== aba mover XYZ / ensinar ===== -->
+<div class="tab" id="tX">
+  <section class="card">
+    <h2>Mover a ponta (garra sempre para baixo)</h2>
+    <div class="steps" style="margin-bottom:8px">Passo: <button class="sm" data-s="1">1</button><button class="sm on" data-s="5">5</button><button class="sm" data-s="10">10</button><button class="sm" data-s="20">20</button> mm</div>
+    <div class="jog">
+      <button data-j="rb+">⟲ base</button><button data-j="x+">Frente</button><button data-j="rb-">base ⟳</button><span></span><button data-j="z+">Subir</button>
+      <button data-j="y+">Esquerda</button><button data-j="g">Garra</button><button data-j="y-">Direita</button><span></span><span></span>
+      <span></span><button data-j="x-">Trás</button><span></span><span></span><button data-j="z-">Descer</button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Ensinar pontos</h2>
+    <div class="row"><input type="text" id="ptName" placeholder="nome (ex.: pegar)" maxlength="15" style="flex:2"><button class="pri" id="bPt">Salvar ponto aqui</button></div>
+    <div class="pts" id="pts" style="margin-top:10px"></div>
+  </section>
+</div>
+
+<!-- ===== aba tarefa ===== -->
+<div class="tab" id="tT">
+  <section class="card">
+    <h2>Pegar e levar</h2>
+    <div style="display:grid;gap:10px;grid-template-columns:1fr 1fr">
+      <label class="f">Pegar em (A)<select id="selA"></select></label>
+      <label class="f">Soltar em (B)<select id="selB"></select></label>
+      <label class="f">Altura de aproximação (mm)<input type="number" id="hAp" value="40" min="10" max="120" step="5"></label>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="pri" id="bPick">▶ Executar</button><button id="bPStop">■ Parar</button></div>
+    <div class="prog" id="prog" style="margin-top:8px"></div>
+  </section>
+</div>
+
+<!-- ===== aba calibracao ===== -->
+<div class="tab" id="tC">
+  <section class="card">
+    <h2>Calibração (faça uma vez, em ordem)</h2>
+    <p style="margin:0 0 10px;font-size:14px;color:var(--mute)">Em cada passo, ajuste os sliders até o braço ficar na pose descrita (use um esquadro ou o nível do celular) e toque em <b>Registrar</b>. A calibração fica salva no ESP32.</p>
+    <div id="calList" style="display:grid;gap:8px"></div>
+    <div class="row" style="margin-top:10px"><button id="bCalReset">Apagar calibração</button></div>
+  </section>
+</div>
+<div class="msg" id="msg"></div>
+</main>
+
+<script>
+// ===================== estado e comunicacao =====================
+const $=id=>document.getElementById(id);
+let S=null,M=null,busy=false,queue={},lastOk=0,drag=-1,jogStep=5,task=null;
+const sliders={};            // junta -> lista de sliders (a mesma junta pode aparecer em 2 abas)
+function msg(t){$('msg').textContent=t;clearTimeout(msg.t);msg.t=setTimeout(()=>$('msg').textContent='',4000)}
+async function api(p){const r=await fetch('/api/'+p,{cache:'no-store'});if(!r.ok)throw new Error(r.status);lastOk=Date.now();return r.json()}
+async function act(p,ok){try{const d=await api(p);if(d.j)S=d;else M=d;render();if(ok)msg(ok)}catch(e){status(false)}}
+
+// fila de envio dos sliders: um pedido por vez, so o valor mais novo de cada junta
+async function pump(){
+  if(busy)return;busy=true;
+  try{while(Object.keys(queue).length){const q=queue;queue={};
+    S=await api('move?'+Object.entries(q).map(([i,a])=>`j${i}=${a}`).join('&'));render();
+    await new Promise(r=>setTimeout(r,30));}}catch(e){status(false)}
+  busy=false;
+}
+
+// ===================== sliders =====================
+function sliderRow(i){
+  const j=S.j[i],d=document.createElement('div');d.className='j';
+  d.innerHTML=`<div class="jh"><span class="jn">${j.n}</span><span class="jv">${Math.round(j.t)}°</span></div>
+  <div class="jc"><button data-d="-1">−</button><input type="range" min="${j.min}" max="${j.max}" step="1" value="${j.t}"><button data-d="1">+</button></div>`;
+  const s=d.querySelector('input'),v=d.querySelector('.jv');
+  (sliders[i]=sliders[i]||[]).push({s,v});
+  const set=val=>{sliders[i].forEach(o=>{o.s.value=val;o.v.textContent=val+'°'});queue[i]=val;pump();draw()};
+  s.addEventListener('input',()=>{drag=i;set(s.value)});
+  const end=()=>setTimeout(()=>{if(drag===i)drag=-1},400);
+  s.addEventListener('change',end);s.addEventListener('pointerup',end);
+  d.querySelectorAll('button').forEach(b=>b.onclick=()=>set(Math.max(+s.min,Math.min(+s.max,+s.value+(+b.dataset.d)))));
+  return d;
+}
+function buildJoints(){const b=$('joints');b.innerHTML='';for(const k in sliders)delete sliders[k];S.j.forEach((_,i)=>b.appendChild(sliderRow(i)));buildCal()}
+
+// ===================== cinematica direta (igual a kin.h) =====================
+const rad=d=>d*Math.PI/180;
+function toQ(i,s){const c=M.cal[i];return c.qA+c.k*(s-c.sA)}
+function fk(s){ // s = angulos de servo [base, ombro, cotovelo, punho] -> pontos do esqueleto
+  const q=[0,1,2,3].map(i=>toQ(i,s[i]));
+  const c0=Math.cos(rad(q[0])),s0=Math.sin(rad(q[0]));
+  const a1=rad(q[1]),a2=rad(q[1]+q[2]),a3=rad(q[1]+q[2]+q[3]);
+  const rS=M.a,zS=M.h1,rE=rS+M.L1*Math.cos(a1),zE=zS+M.L1*Math.sin(a1);
+  const rP=rE+M.L2*Math.cos(a2),zP=zE+M.L2*Math.sin(a2),rT=rP+M.L3*Math.cos(a3),zT=zP+M.L3*Math.sin(a3);
+  const P=(r,z)=>[r*c0,r*s0,z];
+  return {pts:[[0,0,M.box[3]],P(0,zS),P(rS,zS),P(rE,zE),P(rP,zP),P(rT,zT)],perp:[-s0,c0,0],q,phi:q[1]+q[2]+q[3]};
+}
+
+// ===================== desenho das 3 vistas =====================
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const VIEWS={
+  v34:{az:rad(-55),el:rad(24),box:[-80,290,-240,240,0,360]},
+  vSide:{proj:p=>[p[0],p[2]],box:[-90,330,0,380]},
+  vTop:{proj:p=>[-p[1],p[0]],box:[-300,300,-90,330]},
+};
+(function(){const v=VIEWS.v34,ca=Math.cos(v.az),sa=Math.sin(v.az),ce=Math.cos(v.el),se=Math.sin(v.el);
+  // camera ortografica: direita = (-sin az, cos az, 0); cima = (-cos az sin el, -sin az sin el, cos el)
+  v.proj=p=>[-sa*p[0]+ca*p[1],-ca*se*p[0]-sa*se*p[1]+ce*p[2]];
+  const b=v.box,xs=[],ys=[];for(const x of[b[0],b[1]])for(const y of[b[2],b[3]])for(const z of[b[4],b[5]]){const q=v.proj([x,y,z]);xs.push(q[0]);ys.push(q[1])}
+  v.fit=[Math.min(...xs),Math.max(...xs),Math.min(...ys),Math.max(...ys)];
+  VIEWS.vSide.fit=VIEWS.vSide.box;VIEWS.vTop.fit=VIEWS.vTop.box})();
+
+function drawView(id,cur,ghost,openFrac){
+  const cv=$(id),v=VIEWS[id],dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth||cv.width,h=w*cv.height/cv.width;
+  if(cv._w!==w){cv._w=w;cv.width=w*dpr;cv.height=h*dpr}
+  const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,h);
+  const[f0,f1,f2,f3]=v.fit,sc=Math.min((w-16)/(f1-f0),(h-16)/(f3-f2)),ox=(w-(f1-f0)*sc)/2,oy=(h-(f3-f2)*sc)/2;
+  const T=p=>{const q=v.proj(p);return[ox+(q[0]-f0)*sc,h-oy-(q[1]-f2)*sc]};
+  const line=(a,b,col,wd,dash)=>{const A=T(a),B=T(b);g.strokeStyle=col;g.lineWidth=wd;g.setLineDash(dash||[]);g.beginPath();g.moveTo(A[0],A[1]);g.lineTo(B[0],B[1]);g.stroke()};
+  // mesa (grade de 50 mm) e alcance maximo
+  const gc=css('--grid');
+  for(let x=-100;x<=350;x+=50)line([x,-350,0],[x,350,0],gc,1);
+  for(let y=-350;y<=350;y+=50)line([-100,y,0],[350,y,0],gc,1);
+  const R=M.a+M.L1+M.L2;g.setLineDash([4,4]);g.strokeStyle=gc;g.lineWidth=1.5;g.beginPath();
+  for(let a=-90;a<=90;a+=5){const p=T([R*Math.cos(rad(a)),R*Math.sin(rad(a)),0]);a===-90?g.moveTo(...p):g.lineTo(...p)}g.stroke();g.setLineDash([]);
+  // caixa da base
+  const[x0,x1,yb,zb]=M.box,bc=css('--box'),C=[[x0,-yb],[x1,-yb],[x1,yb],[x0,yb]];
+  for(let i=0;i<4;i++){const a=C[i],b=C[(i+1)%4];line([...a,0],[...b,0],bc,1.2);line([...a,zb],[...b,zb],bc,1.2);line([...a,0],[...a,zb],bc,1.2)}
+  // pontos ensinados
+  if(S&&S.pts){g.font='11px system-ui';g.fillStyle=css('--pt');S.pts.forEach(p=>{const A=T([p.x,p.y,p.z]),B=T([p.x,p.y,0]);g.strokeStyle=css('--pt');g.setLineDash([2,3]);g.beginPath();g.moveTo(...A);g.lineTo(...B);g.stroke();g.setLineDash([]);g.beginPath();g.arc(A[0],A[1],4,0,7);g.fill();g.fillText(p.n,A[0]+6,A[1]-4)})}
+  // braco: alvo (tracejado) e atual (cheio)
+  const arm=(k,col,wd,dash)=>{const P=k.pts;for(let i=0;i<P.length-1;i++)line(P[i],P[i+1],col,wd,dash);
+    const T5=P[5],P4=P[4],dir=[T5[0]-P4[0],T5[1]-P4[1],T5[2]-P4[2]],w=(6+22*openFrac)/2,pp=k.perp;
+    for(const sg of[-1,1]){const base=[P4[0]+dir[0]*.72+sg*w*pp[0],P4[1]+dir[1]*.72+sg*w*pp[1],P4[2]+dir[2]*.72];line(base,[T5[0]+sg*w*pp[0],T5[1]+sg*w*pp[1],T5[2]],col,wd,dash)}
+    if(!dash){g.fillStyle=col;P.slice(2,5).forEach(p=>{const A=T(p);g.beginPath();g.arc(A[0],A[1],wd*1.2,0,7);g.fill()})}};
+  if(ghost)arm(ghost,css('--ghost'),2,[5,4]);
+  arm(cur,css('--arm'),id==='v34'?5:3.5);
+}
+function draw(){
+  if(!S||!M)return;
+  const cur=fk(S.j.slice(0,4).map(j=>j.a));
+  const tg=S.j.slice(0,4).map((j,i)=>sliders[i]&&drag===i?+sliders[i][0].s.value:j.t);
+  const moving=tg.some((t,i)=>Math.abs(t-S.j[i].a)>0.6);
+  const ghost=moving?fk(tg):null;
+  const g5=S.j[5].a,of=M.gA===M.gF?0.5:Math.max(0,Math.min(1,(g5-M.gF)/(M.gA-M.gF)));
+  for(const id in VIEWS)drawView(id,cur,ghost,of);
+}
+
+// ===================== tela =====================
+function status(ok){$('dot').className='dot'+(ok?' on':'');$('stt').textContent=ok?(S&&S.engaged?'servos ligados':'servos soltos'):'sem conexão'}
+const PICK=['Abrindo a garra','Indo para cima do objeto','Descendo','Fechando a garra','Subindo','Indo para cima do destino','Descendo','Soltando','Subindo'];
+function render(){
+  if(!S)return;status(true);
+  if(M&&S.j&&(!sliders[0]||S.j.length!==Object.keys(sliders).length))buildJoints();
+  S.j.forEach((j,i)=>{if(drag===i||queue[i]!==undefined||!sliders[i])return;sliders[i].forEach(o=>{o.s.value=j.t;o.v.textContent=Math.round(j.t)+'°'})});
+  $('bEng').textContent=S.engaged?'Ligados ✓':'Ligar servos';
+  $('spv').textContent=S.speed+'%';if(document.activeElement!==$('speed'))$('speed').value=S.speed;
+  const t=S.tcp;$('tcp').textContent=`ponta: x ${t.x.toFixed(0)}  y ${t.y.toFixed(0)}  z ${t.z.toFixed(0)} mm`;
+  $('phi').textContent=Math.abs(t.phi+90)<5?'garra para baixo':`garra a ${t.phi.toFixed(0)}°`;
+  $('wcal').textContent=S.cal?'':'Sem calibração: o desenho é aproximado e o movimento em XYZ fica bloqueado.';
+  $('werr').textContent=S.err?('⚠ '+S.err):'';
+  // pontos
+  const pl=$('pts');pl.innerHTML=S.pts.length?'':'<span style="color:var(--mute);font-size:14px">Nenhum ponto ainda. Leve a garra até o lugar e toque em “Salvar ponto aqui”.</span>';
+  S.pts.forEach(p=>{const e=document.createElement('div');e.className='pt';
+    e.innerHTML=`<b></b><span>${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)}</span><button class="sm" data-go="${p.i}">Ir</button><button class="sm" data-del="${p.i}">×</button>`;
+    e.querySelector('b').textContent=p.n;pl.appendChild(e)});
+  for(const id of['selA','selB']){const el=$(id),v=el.value;el.innerHTML='';S.pts.forEach(p=>{const o=document.createElement('option');o.value=p.i;o.textContent=p.n;el.appendChild(o)});if([...el.options].some(o=>o.value===v))el.value=v}
+  if(!$('selB').dataset.touched&&S.pts.length>1&&$('selB').value===$('selA').value)$('selB').value=S.pts[1].i;
+  // progresso da tarefa
+  let pr='';if(S.seq.run){pr=task==='pick'&&PICK[S.seq.i]?`Passo ${S.seq.i+1} de ${S.seq.n}: ${PICK[S.seq.i]}`:'Movendo…'}else if(task==='pick')pr=S.err?'Parou.':'Concluído ✓';
+  $('prog').textContent=pr;
+  draw();renderCal();
+}
+
+// ===================== calibracao =====================
+// [titulo, instrucao, juntas que aparecem, indice em M.raw (null = varios)]
+const CAL=[
+ ['1. Braço todo em pé','Ombro, cotovelo e punho alinhados apontando para cima, garra também para cima. Ajuste o giro do punho para os dedos abrirem para os lados.',[1,2,3,4],0],
+ ['2. Base para a frente','Braço apontando reto para a frente (para a face com a logo da UFMT), paralelo às laterais da caixa.',[0],1],
+ ['3. Base 90° para a esquerda','Gire só a base até o braço ficar paralelo à face da frente, apontando para a esquerda (vista de trás do braço).',[0],2],
+ ['4. Ombro na horizontal','Com cotovelo e punho retos como no passo 1, abaixe só o ombro até o braço ficar na horizontal, para a frente.',[1],3],
+ ['5. Cotovelo a 90°','Volte o ombro para cima (passo 1) e dobre só o cotovelo até o antebraço ficar na horizontal, para a frente.',[1,2],4],
+ ['6. Punho a 90°','Com o braço em pé (passo 1), dobre só o punho até a garra ficar na horizontal, para a frente.',[2,3],5],
+ ['7. Garra aberta','Abra a garra até a abertura máxima útil.',[5],6],
+ ['8. Garra fechada','Feche a garra até os dedos se tocarem, sem forçar o servo.',[5],7],
+];
+let calStep=0;
+function buildCal(){const box=$('calList');box.innerHTML='';
+  CAL.forEach((c,k)=>{const d=document.createElement('div');d.className='cal';d.id='cal'+k;
+    d.innerHTML=`<div class="t"><span>${c[0]}</span><span class="no" id="cs${k}">pendente</span></div><p>${c[1]}</p><div class="cs"></div><div class="row"><button class="pri sm" data-mark="${k+1}">Registrar</button><button class="sm" data-open="${k}">Mostrar sliders</button></div>`;
+    box.appendChild(d)});
+  openCal(calStep)}
+function openCal(k){calStep=k;for(const i in sliders)sliders[i]=sliders[i].filter(o=>o.s.isConnected);CAL.forEach((c,i)=>{const d=$('cal'+i);if(!d)return;d.classList.toggle('cur',i===k);const cs=d.querySelector('.cs');cs.innerHTML='';
+  if(i===k&&S)c[2].forEach(j=>cs.appendChild(sliderRow(j)))});
+  for(const i in sliders)sliders[i]=sliders[i].filter(o=>o.s.isConnected);}
+function renderCal(){if(!M||!M.raw)return;CAL.forEach((c,k)=>{const el=$('cs'+k);if(!el)return;const v=M.raw[c[3]];el.textContent=v===null?'pendente':'✓ servo '+v.toFixed(0)+'°';el.className=v===null?'no':'ok'})}
+$('calList').addEventListener('click',async e=>{const m=e.target.closest('[data-mark]'),o=e.target.closest('[data-open]');
+  if(m){await act('cal/mark?p='+m.dataset.mark,'Registrado');const n=+m.dataset.mark;if(n<CAL.length)openCal(n);await poll()}
+  if(o)openCal(+o.dataset.open)});
+$('bCalReset').onclick=()=>{if(confirmReset())act('cal/reset','Calibração apagada')};
+function confirmReset(){const b=$('bCalReset');if(b.dataset.arm){delete b.dataset.arm;b.textContent='Apagar calibração';return true}b.dataset.arm=1;b.textContent='Toque de novo para confirmar';setTimeout(()=>{delete b.dataset.arm;b.textContent='Apagar calibração'},3000);return false}
+
+// ===================== botoes =====================
+$('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.id===b.dataset.t))};
+$('bStop').onclick=()=>act('stop');$('bPStop').onclick=()=>act('stop');
+$('bEng').onclick=()=>act('engage');$('bRelax').onclick=()=>act('relax');$('bHome').onclick=()=>act('home');
+let spT;$('speed').oninput=()=>{$('spv').textContent=$('speed').value+'%';clearTimeout(spT);spT=setTimeout(()=>act('speed?v='+$('speed').value),120)};
+document.querySelector('.steps').onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;jogStep=+b.dataset.s;document.querySelectorAll('.steps button').forEach(x=>x.classList.toggle('on',x===b))};
+document.querySelector('.jog').onclick=e=>{const b=e.target.closest('[data-j]');if(!b)return;const j=b.dataset.j,s=jogStep;task=null;
+  if(j==='g'){const fech=S.j[5].a<(M.gA+M.gF)/2===(M.gF<M.gA);act('grip?c='+(fech?0:1));return}
+  if(j[0]==='r'){act('jogb?d='+(j[2]==='+'?1:-1)*s);return}
+  const d={x:0,y:0,z:0};d[j[0]]=(j[1]==='+'?1:-1)*s;act(`jog?dx=${d.x}&dy=${d.y}&dz=${d.z}`)};
+$('bPt').onclick=()=>{act('pt/save?nome='+encodeURIComponent($('ptName').value.trim()),'Ponto salvo');$('ptName').value=''};
+$('pts').onclick=e=>{const g=e.target.closest('[data-go]'),d=e.target.closest('[data-del]');task=null;if(g)act('pt/go?i='+g.dataset.go+'&h='+(+$('hAp').value||40));if(d)act('pt/del?i='+d.dataset.del)};
+$('selB').onchange=()=>$('selB').dataset.touched=1;
+$('bPick').onclick=()=>{if($('selA').value===$('selB').value){msg('Escolha pontos diferentes para A e B');return}task='pick';act(`pick?a=${$('selA').value}&b=${$('selB').value}&h=${+$('hAp').value||40}`)};
+
+// ===================== atualizacao periodica =====================
+async function poll(){try{if(!busy){if(!M)M=await api('model');const d=await api('state');S=d;render()}}catch(e){status(false)}}
+async function loop(){await poll();const moving=S&&(S.seq.run||S.j.some(j=>Math.abs(j.a-j.t)>0.5));setTimeout(loop,moving?180:700)}
+loop();
+setInterval(()=>{if(Date.now()-lastOk>2500)status(false)},1000);
+window.addEventListener('resize',draw);
+</script>
+</body>
+</html>
+)HTML";
