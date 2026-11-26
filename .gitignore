@@ -29,3 +29,10 @@ Thumbs.db
 *.mkv
 *.rar
 *.7z
+
+# Material de terceiros, cópias compactadas e documentos (ficam só no disco)
+*FABRI creator.step
+*ufmt_logo*.svg
+*.zip
+!logo/SETA Logo Design File.zip
+docs/*.md
